@@ -20,7 +20,9 @@ static void meLoop() {
   hw(0x44000000) = (hw(0x44000000) & 0x00ffffff) + 2;
   hw(0x44000004) = (hw(0x44000004) & 0x00ffffff) * 2;
   vmeToMem(0, ((u32)buffer + 0x08), 2);
-  // note: 0, used as src and dst, is the base of the first internal dsp/vme buffers with a length of 0x2000 bytes.
+  // note: 0, used as src and dst, is the base of the first internal dsp/vme buffers
+  // with a length of 0x2000 bytes. The parameter value is a word offset (32-bit) from 0x04000000
+  // Example: 0 = 0x04000000, 1 = 0x04000004, 2 = 0x04000008, etc.
   
   do {
     meCounter++;
