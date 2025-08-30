@@ -1,7 +1,7 @@
 // m-c/d 2025
 #include "main.h"
 
-PSP_MODULE_INFO("vmegdma", 0, 1, 1);
+PSP_MODULE_INFO("vme-primary-dma", 0, 1, 1);
 PSP_HEAP_SIZE_KB(-1024);
 PSP_MAIN_THREAD_ATTR(PSP_THREAD_ATTR_VFPU | PSP_THREAD_ATTR_USER);
 
@@ -13,7 +13,7 @@ static volatile u32* mem = nullptr;
 __attribute__((noinline, aligned(4)))
 static void meLoop() {
   do {
-    meDCacheWritebackInvalidAll();
+    meDcacheWritebackInvalidateAll();
   } while(!mem || !buffer);
   
   memToVme((u32)buffer, 0, 2);
@@ -41,13 +41,15 @@ void meHandler() {
   asm("sync");
   
   asm volatile(
-    "li          $k0, 0x30000000\n"
-    "mtc0        $k0, $12\n"
-    "sync\n"
-    "la          $k0, %0\n"
-    "li          $k1, 0x80000000\n"
-    "or          $k0, $k0, $k1\n"
-    "jr          $k0\n"
+    "li          $k0, 0x30000000     \n"
+    "mtc0        $k0, $12            \n"
+    "sync                            \n"
+    "la          $k0, %0             \n"
+    "li          $k1, 0x80000000     \n"
+    "or          $k0, $k0, $k1       \n"
+    "cache       0x8, 0($k0)         \n"
+    "sync                            \n"
+    "jr          $k0                 \n"
     "nop\n"
     :
     : "i" (meLoop)
@@ -58,7 +60,7 @@ void meHandler() {
 static int initMe() {
   #define me_section_size (&__stop__me_section - &__start__me_section)
   memcpy((void *)ME_HANDLER_BASE, (void*)&__start__me_section, me_section_size);
-  meDCacheWritebackInvalidAll();
+  sceKernelDcacheWritebackInvalidateAll();
   hw(0xbc10004c) = 0x04;
   hw(0xbc10004c) = 0x0;
   asm volatile("sync");
@@ -87,7 +89,7 @@ int main() {
   buffer[1] = 2;
   sceKernelDcacheWritebackInvalidateAll();
   
-  mem = meGetUncached32(4);
+  meGetUncached32(&mem, 4);
   kcall(&initMe);
   
   sceDisplaySetFrameBuf((void*)(UNCACHED_USER_MASK |
@@ -99,11 +101,11 @@ int main() {
   do {
     sceCtrlPeekBufferPositive(&ctl, 1);
     pspDebugScreenSetXY(0, 1);
-    pspDebugScreenPrintf("%x          ", meCounter);
+    pspDebugScreenPrintf("0x%08x          ", meCounter);
     pspDebugScreenSetXY(0, 2);
-    pspDebugScreenPrintf("%u          ", 0x00ffffff & *uhw(&(buffer[2])));
+    pspDebugScreenPrintf("0x%08x          ", *uhw(&(buffer[2])));
     pspDebugScreenSetXY(0, 3);
-    pspDebugScreenPrintf("%u          ", 0x00ffffff & *uhw(&(buffer[3])));
+    pspDebugScreenPrintf("0x%08x          ", *uhw(&(buffer[3])));
     sceDisplayWaitVblankStart();
   } while(!(ctl.Buttons & PSP_CTRL_HOME));
   
@@ -113,7 +115,7 @@ int main() {
   } while(meExit < 2);
   
   free((void*)buffer);
-  meGetUncached32(0);
+  meGetUncached32(&mem, 0);
   exitSample("Exiting...");
   return 0;
 }

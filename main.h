@@ -26,7 +26,7 @@
 
 #define ME_HANDLER_BASE       0xbfc00000
 
-inline void meDCacheWritebackInvalidAll() {
+inline void meDcacheWritebackInvalidateAll() {
   asm volatile ("sync");
   for (int i = 0; i < 8192; i += 64) {
     asm("cache 0x14, 0(%0)" :: "r"(i));
@@ -39,17 +39,25 @@ inline void meHalt() {
   asm volatile(".word 0x70000000");
 }
 
-inline u32* meGetUncached32(const u32 size) {
+inline void meGetUncached32(volatile u32** const mem, const u32 size) {
   static void* _base = nullptr;
   if (!_base) {
-    _base = memalign(16, size*4);
-    memset(_base, 0, size);
+    const u32 byteCount = size * 4;
+    _base = memalign(16, byteCount);
+    memset(_base, 0, byteCount);
     sceKernelDcacheWritebackInvalidateAll();
-    return (u32*)(UNCACHED_USER_MASK | (u32)_base);
+    *mem = (u32*)(UNCACHED_USER_MASK | (u32)_base);
+    __asm__ volatile (
+      "cache 0x1b, 0(%0)  \n"
+      "sync               \n"
+      : : "r" (mem) : "memory"
+    );
+    return;
   } else if (!size) {
     free(_base);
   }
-  return nullptr;
+  *mem = nullptr;
+  return;
 }
 
 inline void vmeDmaWait() {
